@@ -86,13 +86,92 @@ This will be activated once API credentials and testing are finalized.
 
 ---
 
+## Design Tradeoffs
+
+Building automation across multiple platforms means navigating different constraints. Here are the key decisions and the reasoning behind them.
+
+### API vs Browser Automation
+
+YouTube offers a mature, well-documented Data API with OAuth support, quota management, and scheduled publishing built in. The right call is obvious: use the API.
+
+TikTok is a different story. There is no public upload API available to individual creators — TikTok's Content Posting API is restricted to approved businesses and requires a lengthy review process. The only viable path for an individual creator is browser automation via Playwright. This introduces fragility (DOM changes can break selectors, date pickers are notoriously hard to automate) but it's the only option that actually works today. The tradeoff is: brittleness in exchange for functionality that simply doesn't exist through official channels.
+
+Meta sits in between. Instagram and Facebook both offer Graph API endpoints for Reels publishing, but the documentation is fragmented and the approval process for permissions is non-trivial. We chose the API route here because it exists and is more reliable long-term than browser automation, even though the setup cost is higher.
+
+**The principle: use the most stable integration available per platform, not a uniform approach across all of them.**
+
+### Batch Sizing
+
+YouTube's Data API enforces a quota of 10,000 units per day. Each video upload consumes approximately 1,600 units. That gives a hard ceiling of ~6 uploads per day, but in practice the quota accounting is slightly more generous, allowing 8-10 uploads reliably.
+
+Batching at 8-10 videos per day isn't a preference — it's a platform constraint. The system is designed around it: the uploader asks which batch to run (1-10, 11-20, etc.), calculates scheduled dates for that batch window, and picks up cleanly where the previous batch left off. This makes multi-day upload campaigns predictable rather than error-prone.
+
+### Content and Schedule Separation
+
+The CSV stores only content: filenames, captions, and hashtags. The posting schedule (which day gets which time, per platform) lives in a separate `posting_schedule.json` config file. Dates are calculated at runtime.
+
+This separation means:
+- **Refreshing captions** doesn't require re-entering schedule preferences
+- **Changing posting times** doesn't require regenerating captions
+- **Adding a new platform** only needs a new key in the schedule config — the CSV doesn't change
+- **Batch uploads across multiple days** stay consistent because dates are derived from the schedule, not hardcoded in content
+
+### Resumable Uploads for Meta
+
+Instagram's Graph API normally requires a publicly accessible URL for your video file. That means you'd need to host videos on S3, set up ngrok, or use some other hosting solution just to pass a URL to the API.
+
+Instead, we use Instagram's resumable upload flow — a lesser-documented alternative that lets you upload the binary file directly to `rupload.facebook.com`. No public URL, no cloud storage, no tunneling. Just a local file streamed straight to Instagram's servers. It's more implementation work, but it eliminates an entire infrastructure dependency.
+
+### Two-Tier Caption Generation
+
+Initial caption generation uses Claude Sonnet 4 with web search enabled. The model searches the internet for context about each video (who's in it, what event, what happened) and writes informed, engaging captions. This costs ~$0.10 per video.
+
+Caption refresh skips the web search and asks the model to write variations of existing captions. This costs ~$0.02 per video — 5x cheaper.
+
+The insight: the expensive part is research, not writing. Once the context is established, generating variations is cheap. This two-tier approach lets you repost the same videos weekly with fresh captions without re-incurring the research cost each time.
+
+---
+
+## Why Claude Sonnet 4
+
+Caption generation is the core intelligence of this system, so the model choice matters.
+
+**Why Claude over GPT-4 or open-source models:**
+
+- **Tool use (web search)** — Claude Sonnet 4 supports native tool use, which means the model can autonomously search the web mid-generation. When it encounters a video filename like `Tiger_ChipIn_2005Masters_V1.mp4`, it doesn't just guess — it searches for "Tiger Woods chip in 2005 Masters" and writes captions grounded in real context. This is the difference between generic filler and captions that reference the actual moment, the score, the stakes.
+
+- **Cost-performance sweet spot** — Claude Sonnet 4 sits between Haiku (fast/cheap but less capable) and Opus (most capable but expensive). For content generation with web search, Sonnet gives high-quality output at a price point that makes batch processing 75+ videos practical (~$8-10 total). Opus would triple the cost without meaningfully better captions. Haiku would save money but produce noticeably weaker copy.
+
+- **Structured output reliability** — The caption generator needs the model to return consistently formatted responses (separate TikTok caption, TikTok hashtags, YouTube caption, YouTube hashtags, Meta caption, Meta hashtags). Claude Sonnet 4 follows these formatting instructions reliably across hundreds of sequential generations without drift or hallucinated formatting.
+
+- **Tone control** — Faceless content captions need a specific voice: engaging, slightly provocative, emoji-forward for TikTok, cleaner for YouTube, hashtag-optimized for Instagram. Claude handles per-platform tone shifting well within a single prompt, so one API call generates all platform variants simultaneously.
+
+**Why not a local model:** Running inference locally (Llama, Mistral, etc.) would eliminate API costs but lose web search capability entirely. Since the value of these captions comes from contextual accuracy — not just creative writing — losing web search would fundamentally degrade output quality.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Why |
+|-------|-----------|-----|
+| **Language** | Python 3.8+ | Dominant ecosystem for automation, API clients, and browser control. Every platform SDK and tool used here has first-class Python support. |
+| **AI** | Anthropic Claude Sonnet 4 | Native tool use for web search during generation. Best cost/quality ratio for batch content creation. See [Why Claude Sonnet 4](#why-claude-sonnet-4). |
+| **YouTube** | YouTube Data API v3 + Google OAuth | Official API with scheduling, quota management, and resumable uploads. Most reliable path. |
+| **TikTok** | Playwright | No public upload API exists for individual creators. Playwright provides the most robust browser automation with auto-wait, network interception, and persistent contexts. Chosen over Selenium for its modern async architecture and built-in retry logic. |
+| **Meta** | Meta Graph API + Resumable Upload | Official API for Instagram/Facebook Reels. Resumable upload flow eliminates the need for public video hosting. |
+| **Scheduling** | JSON config + runtime calculation | Dates are derived, not stored. Keeps content and schedule decoupled. See [Content and Schedule Separation](#content-and-schedule-separation). |
+| **UI** | Rich (Python) | Terminal UI with tables, progress bars, and styled output. No web server or frontend framework needed for what is fundamentally a CLI tool. |
+| **Video Analysis** | OpenCV | Extracts frames from video files for analysis. Lightweight, well-maintained, no GPU required. |
+
+---
+
 ## Quick Start
 
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/faceless-social-bot.git
-cd faceless-social-bot
+git clone https://github.com/RheingoldAI/faceless-social-media-video-uploader.git
+cd faceless-social-media-video-uploader
 pip3 install -r requirements.txt
 ```
 
@@ -223,18 +302,6 @@ Launch Chrome with remote debugging first, log in manually, then run the uploade
 ```bash
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
 ```
-
----
-
-## Built With
-
-- **Python 3.8+**
-- **Anthropic Claude Sonnet 4** — AI caption generation with web search
-- **YouTube Data API v3** — Video uploads and scheduling
-- **Playwright** — Browser automation for TikTok
-- **Meta Graph API** — Instagram and Facebook Reels (WIP)
-- **Rich** — Terminal UI
-- **OpenCV** — Video frame extraction
 
 ---
 
