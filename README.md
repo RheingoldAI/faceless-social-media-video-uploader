@@ -116,12 +116,6 @@ This separation means:
 - **Adding a new platform** only needs a new key in the schedule config — the CSV doesn't change
 - **Batch uploads across multiple days** stay consistent because dates are derived from the schedule, not hardcoded in content
 
-### Resumable Uploads for Meta
-
-Instagram's Graph API normally requires a publicly accessible URL for your video file. That means you'd need to host videos on S3, set up ngrok, or use some other hosting solution just to pass a URL to the API.
-
-Instead, we use Instagram's resumable upload flow — a lesser-documented alternative that lets you upload the binary file directly to `rupload.facebook.com`. No public URL, no cloud storage, no tunneling. Just a local file streamed straight to Instagram's servers. It's more implementation work, but it eliminates an entire infrastructure dependency.
-
 ### Two-Tier Caption Generation
 
 Initial caption generation uses Claude Sonnet 4 with web search enabled. The model searches the internet for context about each video (who's in it, what event, what happened) and writes informed, engaging captions. This costs ~$0.10 per video.
