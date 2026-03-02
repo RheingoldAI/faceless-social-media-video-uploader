@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+
+# API Keys & Credentials
+.env
+config/client_secret*.json
+config/youtube_token.pickle
+config/meta_config.json
+# Note: config/posting_schedule.json is tracked (not a secret)
+
+# Generated Data
+data/*.csv
+data/*.json
+
+# Video Files
+videos/
+V1/
+V2/
+V3/
+*.mp4
+*.mov
+*.avi
+*.MP4
+*.MOV
+
+# Brand assets (channel-specific)
+assets/
+
+# Browser debug profile (TikTok Playwright)
+.chrome-debug-profile/
+
+# Debug files
+debug_*
+test_videos/
+
+# One-off scripts
+generate_meta_captions.py
+
+# IDE & OS
+.vscode/
+.DS_Store
+.claude/
+
+# Images
+*.png
+*.jpg
+*.jpeg
+
+# Temporary
+*.log
+*.tmp
+
+# Old project structure
+GolfAutomation/
+(TESTING)/
+Logos/

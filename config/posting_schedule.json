@@ -1,0 +1,8 @@
+{
+  "Monday":    { "tiktok": "19:00", "youtube": "14:00", "meta": "12:00" },
+  "Tuesday":   { "tiktok": "19:00", "youtube": "15:00", "meta": "11:00" },
+  "Wednesday": { "tiktok": "18:00", "youtube": "16:00", "meta": "12:00" },
+  "Thursday":  { "tiktok": "08:00", "youtube": "14:00", "meta": "11:00" },
+  "Friday":    { "tiktok": "17:00", "youtube": "16:00", "meta": "13:00" },
+  "Saturday":  { "tiktok": "17:00", "youtube": "18:00", "meta": "10:00" }
+}
