@@ -657,6 +657,57 @@ class TikTokScheduler:
             if input("\nContinue? (yes/no): ").strip().lower() not in ['yes', 'y']:
                 return
 
+        # BATCH UPLOAD OPTION
+        print("\n" + "=" * 60)
+        print("📦 BATCH UPLOAD OPTIONS")
+        print("=" * 60)
+        print("\nYou can upload in batches to manage large video libraries.\n")
+
+        use_batch = input("Do you want to upload in batches? (yes/no): ").strip().lower()
+
+        if use_batch in ['yes', 'y']:
+            batch_size = input("\nHow many videos per batch? (default: 10): ").strip()
+            batch_size = int(batch_size) if batch_size.isdigit() else 10
+
+            total_batches = (len(videos) + batch_size - 1) // batch_size
+
+            print(f"\n📊 Upload Plan:")
+            print(f"   Total videos: {len(videos)}")
+            print(f"   Batch size: {batch_size}")
+            print(f"   Total batches: {total_batches}")
+
+            for i in range(total_batches):
+                start_idx = i * batch_size
+                end_idx = min(start_idx + batch_size, len(videos))
+                first_date = post_dates[start_idx]
+                last_date = post_dates[end_idx - 1]
+                print(f"   Batch {i+1}: Videos {start_idx+1}-{end_idx} ({first_date['date']} → {last_date['date']})")
+
+            print(f"\n" + "=" * 60)
+            batch_num = input(f"Which batch do you want to upload now? (1-{total_batches}): ").strip()
+
+            if not batch_num.isdigit() or int(batch_num) < 1 or int(batch_num) > total_batches:
+                print("❌ Invalid batch number. Cancelled.")
+                return
+
+            batch_num = int(batch_num)
+            start_idx = (batch_num - 1) * batch_size
+            end_idx = min(start_idx + batch_size, len(videos))
+
+            videos_to_upload = videos[start_idx:end_idx]
+            dates_to_use = post_dates[start_idx:end_idx]
+
+            print(f"\n✓ Selected Batch {batch_num}")
+            print(f"✓ Uploading videos {start_idx+1} to {end_idx}")
+            print(f"✓ Scheduling: {dates_to_use[0]['date']} → {dates_to_use[-1]['date']}")
+            print(f"✓ Total: {len(videos_to_upload)} videos\n")
+        else:
+            videos_to_upload = videos
+            dates_to_use = post_dates
+            batch_num = 1
+            total_batches = 1
+            print("\n✓ Uploading all videos\n")
+
         profile_dir = str(Path.home() / '.chrome-debug-profile')
 
         print("\n🌐 Launching Chrome...")
@@ -687,9 +738,9 @@ class TikTokScheduler:
             input("   Press ENTER when ready...")
 
             # Process videos
-            for idx, (video_info, date_info) in enumerate(zip(videos, post_dates), 1):
+            for idx, (video_info, date_info) in enumerate(zip(videos_to_upload, dates_to_use), 1):
                 print(f"\n{'=' * 60}")
-                print(f"Video {idx}/{len(videos)}")
+                print(f"Video {idx}/{len(videos_to_upload)}")
                 print(f"{'=' * 60}")
 
                 video_path = self.videos_folder / video_info['filename']
@@ -705,7 +756,7 @@ class TikTokScheduler:
 
                 # Always continue to next video regardless of success/failure
 
-                if idx < len(videos):
+                if idx < len(videos_to_upload):
                     print("\n⏳ Waiting 5 seconds before next upload...")
                     time.sleep(5)
 
@@ -713,13 +764,17 @@ class TikTokScheduler:
             print("\n" + "=" * 60)
             print("🎉 COMPLETE!")
             print("=" * 60)
-            print(f"\n✅ Scheduled: {self.scheduled_count}/{len(videos)} videos")
+            print(f"\n✅ Scheduled: {self.scheduled_count}/{len(videos_to_upload)} videos")
 
             if self.skipped:
                 print(f"\n⚠️  Issues ({len(self.skipped)} videos):")
                 for item in self.skipped:
                     print(f"   • {item['filename']}")
                     print(f"     └─ {item['reason']}")
+
+            if use_batch in ['yes', 'y'] and batch_num < total_batches:
+                print(f"\n💡 TIP: To upload the next batch, run this script again")
+                print(f"    and select Batch {batch_num + 1}")
 
             input("\nPress ENTER to close Chrome and finish...")
 
